@@ -1,53 +1,59 @@
+/*
+ * Voice Pick Code generator (PTI).
+ * CRC-16 (polynomial 0xA001, initial value 0) over GTIN + Lot + optional pack date (YYMMDD),
+ * reduced to 4 digits.
+ */
+(function (root) {
+    'use strict';
 
-
-
-	function CreateCrc16(){
-        var polynomial,value,temp;
-        var table=new Array(256);
-        
-            polynomial=40961;
-        for(i=0;i<table.length;++i){
-            value=0;temp=i;
-        for(j=0;j<8;++j){if(0!=((value^temp)&1)){
-            value=(value>>1)^polynomial
-        }else{
-            value>>=1
+    var TABLE = (function () {
+        var polynomial = 0xA001;
+        var table = new Array(256);
+        for (var i = 0; i < 256; ++i) {
+            var value = 0;
+            var temp = i;
+            for (var j = 0; j < 8; ++j) {
+                if (((value ^ temp) & 1) !== 0) {
+                    value = (value >> 1) ^ polynomial;
+                } else {
+                    value >>= 1;
+                }
+                temp >>= 1;
+            }
+            table[i] = value;
         }
-            temp>>=1
+        return table;
+    })();
+
+    function voicePickCode(gtin, lot, date) {
+        var plainText = String(gtin) + String(lot) + (date ? String(date) : '');
+        var crc = 0;
+        for (var i = 0; i < plainText.length; ++i) {
+            var index = (crc ^ plainText.charCodeAt(i)) % 256;
+            crc = (crc >> 8) ^ TABLE[index];
         }
-            table[i]=value
-        }return table
-    }
-    
-    var crc,table,GTINLotString,index;
-
-
-    var GTIN = "10850510002011";
-    var Lot = "46587443HG234"
-    var date = "180616" //YYMMDD
-    GTINLotString = GTIN+Lot+date;
-    
-    
-    
-    crc=0;
-    table=CreateCrc16();
-    
-    for(i=0;i<GTINLotString.length;++i){
-        index=(crc^GTINLotString.charCodeAt(i))%256;
-        crc=(crc>>8)^table[index]
-    }
-    
-    var VoiceCode=(crc%10000)+"";
-    var length=VoiceCode.length;
-    for(i=VoiceCode.length;i<4;i++)
-    {
-        VoiceCode="0"+VoiceCode
+        var code = String(crc % 10000);
+        while (code.length < 4) {
+            code = '0' + code;
+        }
+        return {
+            plainText: plainText,
+            code: code,
+            smallDigits: code.substr(0, 2),
+            largeDigits: code.substr(2, 2)
+        };
     }
 
-
-    console.log("Plain Text = " +GTINLotString);
-    console.log("Voice = " + VoiceCode);
-    console.log("Small Digits = " + VoiceCode.substr(0,2));
-    console.log("Large Digits = " + VoiceCode.substr(2,2));
-  
-  
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = voicePickCode;
+        if (require.main === module) {
+            var r = voicePickCode('10850510002011', '46587443HG234', '180616');
+            console.log('Plain Text = ' + r.plainText);
+            console.log('Voice = ' + r.code);
+            console.log('Small Digits = ' + r.smallDigits);
+            console.log('Large Digits = ' + r.largeDigits);
+        }
+    } else {
+        root.voicePickCode = voicePickCode;
+    }
+})(this);
