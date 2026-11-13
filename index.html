@@ -1,22 +1,195 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title></title>
-
-
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Pick Code Generator</title>
+<style>
+    :root {
+        --bg: #f5f6f8;
+        --card: #ffffff;
+        --text: #1d2330;
+        --muted: #5f6878;
+        --border: #d4d8e0;
+        --accent: #2f6fde;
+        --error: #c0392b;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg: #15181e;
+            --card: #1f232b;
+            --text: #e8eaef;
+            --muted: #9aa3b2;
+            --border: #353b47;
+            --accent: #6b9cff;
+            --error: #ff6b5e;
+        }
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        padding: 32px 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+        max-width: 480px;
+        margin: 0 auto;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    p.lead { margin: 0 0 20px; color: var(--muted); font-size: 0.95rem; }
+    label { display: block; font-weight: 600; margin-bottom: 4px; }
+    .hint { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+    input {
+        width: 100%;
+        padding: 10px 12px;
+        margin-bottom: 4px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    input[aria-invalid="true"] { border-color: var(--error); }
+    .field { margin-bottom: 16px; }
+    .error { color: var(--error); font-size: 0.85rem; min-height: 1.2em; }
+    button {
+        width: 100%;
+        padding: 12px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    #result { margin-top: 24px; text-align: center; }
+    #result[hidden] { display: none; }
+    .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-weight: 700;
+        line-height: 1;
+        border: 2px solid var(--text);
+        border-radius: 8px;
+        display: inline-block;
+        padding: 10px 16px;
+    }
+    .code .small { font-size: 1.6rem; }
+    .code .large { font-size: 3.2rem; }
+    .plain {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.85rem;
+        word-break: break-all;
+    }
+    .plain code { color: var(--text); }
+</style>
 </head>
 
 <body>
-    
+<main>
+    <h1>Voice Pick Code Generator</h1>
+    <p class="lead">Generates the 4-digit PTI voice pick code from a GTIN, lot number and optional pack date.</p>
 
+    <form id="vpc-form" novalidate>
+        <div class="field">
+            <label for="gtin">GTIN <span class="hint">(14 digits)</span></label>
+            <input id="gtin" name="gtin" inputmode="numeric" autocomplete="off" maxlength="14" required>
+            <div class="error" id="gtin-error"></div>
+        </div>
+        <div class="field">
+            <label for="lot">Lot number</label>
+            <input id="lot" name="lot" autocomplete="off" maxlength="20" required>
+            <div class="error" id="lot-error"></div>
+        </div>
+        <div class="field">
+            <label for="date">Pack date <span class="hint">(YYMMDD, optional)</span></label>
+            <input id="date" name="date" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="YYMMDD">
+            <div class="error" id="date-error"></div>
+        </div>
+        <button type="submit">Generate code</button>
+    </form>
 
-    
-    
+    <section id="result" aria-live="polite" hidden>
+        <div class="code"><span class="small" id="small"></span><span class="large" id="large"></span></div>
+        <div class="plain">Input string: <code id="plain"></code></div>
+    </section>
+</main>
+
+<script src="dist/voicepickcode.js"></script>
+<script>
+(function () {
+    var form = document.getElementById('vpc-form');
+    var fields = {
+        gtin: document.getElementById('gtin'),
+        lot: document.getElementById('lot'),
+        date: document.getElementById('date')
+    };
+
+    function validDate(s) {
+        if (!/^\d{6}$/.test(s)) return false;
+        var month = +s.substr(2, 2);
+        var day = +s.substr(4, 2);
+        return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+    }
+
+    var rules = {
+        gtin: function (v) {
+            if (!v) return 'GTIN is required.';
+            if (!/^\d{14}$/.test(v)) return 'GTIN must be exactly 14 digits.';
+            return '';
+        },
+        lot: function (v) {
+            if (!v) return 'Lot number is required.';
+            if (!/^[\x21-\x7E]+$/.test(v)) return 'Lot number must not contain spaces or special characters.';
+            return '';
+        },
+        date: function (v) {
+            if (v && !validDate(v)) return 'Date must be YYMMDD (e.g. 180616).';
+            return '';
+        }
+    };
+
+    function check(name) {
+        var msg = rules[name](fields[name].value.trim());
+        document.getElementById(name + '-error').textContent = msg;
+        fields[name].setAttribute('aria-invalid', msg ? 'true' : 'false');
+        return !msg;
+    }
+
+    Object.keys(fields).forEach(function (name) {
+        fields[name].addEventListener('input', function () {
+            if (fields[name].getAttribute('aria-invalid') === 'true') check(name);
+        });
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var ok = ['gtin', 'lot', 'date'].map(check).every(Boolean);
+        var result = document.getElementById('result');
+        if (!ok) {
+            result.hidden = true;
+            return;
+        }
+        var r = voicePickCode(
+            fields.gtin.value.trim(),
+            fields.lot.value.trim(),
+            fields.date.value.trim()
+        );
+        document.getElementById('small').textContent = r.smallDigits;
+        document.getElementById('large').textContent = r.largeDigits;
+        document.getElementById('plain').textContent = r.plainText;
+        result.hidden = false;
+    });
+})();
+</script>
 </body>
 </html>
-
-
-
-
-                                 
